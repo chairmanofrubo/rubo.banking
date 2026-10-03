@@ -25,6 +25,8 @@ flask --app app run --host=0.0.0.0 --port=5000
 `SECRET_KEY` and `ADMIN_PASSWORD` are required for a fresh database. Startup
 fails clearly when `SECRET_KEY` is missing instead of running with an insecure
 default. Use a password manager to generate production values.
+There is also "DATABASE_URL", which you can use to link the application up to an 
+POSTFRES SQL databse for .db storage.
 
 ## Account types
 
