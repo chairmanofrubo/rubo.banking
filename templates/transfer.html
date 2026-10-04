@@ -1,95 +1,69 @@
-{% extends "base.html" %}
+﻿{% extends "base.html" %}
 
 {% block title %}
-Transfer | MiniBank
+Transfer | RUBO Banking
 {% endblock %}
 
 {% block content %}
 
 <div class="page-heading">
-
     <div>
-        <p class="page-label">
-            TRANSFER
-        </p>
-
-        <h1>
-            Transfer demo funds
-        </h1>
-
-        <p>
-            Send demo money to another MiniBank account.
-        </p>
+        <p class="page-label">TRANSFER</p>
+        <h1>Send money</h1>
+        <p>Transfer demo funds securely to another RUBO account.</p>
     </div>
-
 </div>
 
-
 <div class="transfer-layout">
-
     <section class="professional-panel transfer-panel">
-
         <div class="panel-header">
-
             <div>
                 <h2>New transfer</h2>
-
+                <p>Enter the recipient and amount. You will confirm the transfer with your Transfer PIN.</p>
                 <p>
-                    Enter the recipient and transfer amount.
+                    <a href="{{ url_for('beneficiaries') }}">Manage beneficiaries</a>
+                    Â·
+                    <a href="{{ url_for('scheduled_transfers') }}">Schedule a transfer</a>
                 </p>
-                <p><a href="{{ url_for('beneficiaries') }}">Manage beneficiaries</a> · <a href="{{ url_for('scheduled_transfers') }}">Schedule a transfer</a></p>
             </div>
-
         </div>
-
 
         <form method="post" class="professional-form">
 
             <div class="form-group">
-                <label for="beneficiary_id">
-                    Saved beneficiary (optional)
-                </label>
+                <label for="beneficiary_id">Saved beneficiary</label>
+
                 <select id="beneficiary_id" name="beneficiary_id">
                     <option value="">Choose a saved beneficiary</option>
+
                     {% for item in beneficiaries %}
                     <option value="{{ item.id }}">
-                        {{ item.nickname }} · @{{ item.beneficiary.username }}
+                        {{ item.nickname }} Â· @{{ item.beneficiary.username }}
                     </option>
                     {% endfor %}
                 </select>
             </div>
 
             <div class="form-group">
-
                 <label for="receiver_username">
-                    Recipient username (if no beneficiary is selected)
+                    Recipient username
                 </label>
 
                 <div class="input-prefix-wrapper">
-
                     <span>@</span>
-
                     <input
                         id="receiver_username"
                         name="receiver_username"
                         placeholder="username"
                     >
-
                 </div>
-
             </div>
 
-
             <div class="form-group">
-
-                <label for="amount">
-                    Amount
-                </label>
+                <label for="amount">Amount</label>
 
                 <div class="input-prefix-wrapper">
-
                     <span>$</span>
-
                     <input
                         id="amount"
                         name="amount"
@@ -99,17 +73,11 @@ Transfer | MiniBank
                         placeholder="0.00"
                         required
                     >
-
                 </div>
-
             </div>
 
-
             <div class="form-group">
-
-                <label for="note">
-                    Transfer note
-                </label>
+                <label for="note">Transfer note</label>
 
                 <input
                     id="note"
@@ -117,48 +85,31 @@ Transfer | MiniBank
                     maxlength="200"
                     placeholder="Optional note"
                 >
-
             </div>
 
-
-            <button
-                class="primary-bank-button"
-                type="submit"
-            >
-                Transfer funds
+            <button class="primary-bank-button" type="submit">
+                Review transfer
             </button>
-
         </form>
-
     </section>
 
-
     <aside class="transfer-summary-card">
+        <span class="summary-label">AVAILABLE BALANCE</span>
 
-        <span class="summary-label">
-            AVAILABLE BALANCE
-        </span>
-
-        <h2>
-            {{ current_user.balance|money }}
-        </h2>
+        <h2>{{ current_user.balance|money }}</h2>
 
         <div class="summary-divider"></div>
 
         <p>
-            Demo transfers are processed instantly between MiniBank demo accounts.
+            Your transfer will not be completed until you enter your
+            Transfer PIN.
         </p>
 
         <div class="demo-security-box">
-            DEMO SYSTEM
-
-            <span>
-                No real funds are transferred.
-            </span>
+            TRANSFER SECURITY
+            <span>6-digit Transfer PIN required before completion.</span>
         </div>
-
     </aside>
-
 </div>
 
 {% endblock %}
