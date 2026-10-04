@@ -1,0 +1,80 @@
+﻿{% extends "base.html" %}
+
+{% block title %}
+Authorize Transfer | RUBO Banking
+{% endblock %}
+
+{% block content %}
+
+<div class="page-heading">
+    <div>
+        <p class="page-label">TRANSFER</p>
+        <h1>Authorize transfer</h1>
+        <p>Enter your 6-digit Transfer PIN to complete this transfer.</p>
+    </div>
+</div>
+
+<section class="professional-panel transfer-confirm-card">
+
+    <div class="transfer-review">
+
+        <div class="transfer-review-row">
+            <span>Recipient</span>
+            <strong>{{ receiver.display_name }}</strong>
+        </div>
+
+        <div class="transfer-review-row">
+            <span>Amount</span>
+            <strong>{{ amount|money }}</strong>
+        </div>
+
+        {% if note %}
+        <div class="transfer-review-row">
+            <span>Note</span>
+            <strong>{{ note }}</strong>
+        </div>
+        {% endif %}
+
+    </div>
+
+    <form method="post"
+          action="{{ url_for('confirm_transfer') }}"
+          class="professional-form">
+
+        <div class="form-group">
+            <label for="transfer_pin">Transfer PIN</label>
+
+            <input
+                id="transfer_pin"
+                name="transfer_pin"
+                type="password"
+                inputmode="numeric"
+                pattern="[0-9]{6}"
+                maxlength="6"
+                autocomplete="off"
+                placeholder="Enter 6-digit PIN"
+                required
+                autofocus
+            >
+
+            <small>
+                Enter the 6-digit PIN you set in Accounts.
+            </small>
+        </div>
+
+        <div class="form-actions">
+            <button class="primary-bank-button" type="submit">
+                Authorize Transfer
+            </button>
+
+            <a class="secondary-bank-button"
+               href="{{ url_for('transfer') }}">
+                Cancel
+            </a>
+        </div>
+
+    </form>
+
+</section>
+
+{% endblock %}

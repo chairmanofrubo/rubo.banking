@@ -1,7 +1,7 @@
-{% extends "base.html" %}
+﻿{% extends "base.html" %}
 
 {% block title %}
-Checking account | MiniBank
+Accounts | RUBO Banking
 {% endblock %}
 
 {% block content %}
@@ -9,26 +9,127 @@ Checking account | MiniBank
 <div class="page-heading">
     <div>
         <p class="page-label">ACCOUNT</p>
-        <h1>Your checking account</h1>
-        <p>One clear demo checking balance for transfers and simulated payments.</p>
+        <h1>My account</h1>
+        <p>Manage your demo checking account and Transfer PIN.</p>
     </div>
 </div>
 
 <section class="account-balance-card">
     <span class="balance-label">AVAILABLE CHECKING BALANCE</span>
     <h2>{{ current_user.balance|money }}</h2>
-    <p>Available for transfers to other MiniBank users.</p>
+    <p>Available for transfers to other RUBO demo accounts.</p>
+</section>
+
+<section class="professional-panel transfer-pin-card">
+    <div class="panel-header">
+        <div>
+            <p class="page-label">SECURITY</p>
+            <h2>Transfer PIN</h2>
+            <p>
+                Use your 6-digit Transfer PIN to authorize transfers.
+                Your PIN is securely hashed and is never displayed.
+            </p>
+        </div>
+
+        {% if transfer_pin_configured %}
+        <span class="account-status">SET UP</span>
+        {% else %}
+        <span class="account-status account-status-warning">NOT SET</span>
+        {% endif %}
+    </div>
+
+    {% if transfer_pin_configured %}
+    <div class="pin-security-status">
+        <strong>Transfer PIN is active</strong>
+        <span>You will be asked for it before a transfer is completed.</span>
+    </div>
+    {% endif %}
+
+    <form method="post"
+          action="{{ url_for('set_transfer_pin') }}"
+          class="professional-form transfer-pin-form">
+
+        {% if transfer_pin_configured %}
+        <div class="form-group">
+            <label for="current_pin">Current Transfer PIN</label>
+            <input
+                id="current_pin"
+                name="current_pin"
+                type="password"
+                inputmode="numeric"
+                pattern="[0-9]{6}"
+                maxlength="6"
+                autocomplete="off"
+                placeholder="Enter 6-digit PIN"
+                required
+            >
+        </div>
+        {% endif %}
+
+        <div class="form-group">
+            <label for="new_pin">
+                {% if transfer_pin_configured %}
+                New Transfer PIN
+                {% else %}
+                Create Transfer PIN
+                {% endif %}
+            </label>
+
+            <input
+                id="new_pin"
+                name="new_pin"
+                type="password"
+                inputmode="numeric"
+                pattern="[0-9]{6}"
+                maxlength="6"
+                autocomplete="new-password"
+                placeholder="6 digits"
+                required
+            >
+        </div>
+
+        <div class="form-group">
+            <label for="confirm_pin">Confirm Transfer PIN</label>
+
+            <input
+                id="confirm_pin"
+                name="confirm_pin"
+                type="password"
+                inputmode="numeric"
+                pattern="[0-9]{6}"
+                maxlength="6"
+                autocomplete="new-password"
+                placeholder="Enter it again"
+                required
+            >
+        </div>
+
+        <button class="primary-bank-button" type="submit">
+            {% if transfer_pin_configured %}
+            Change Transfer PIN
+            {% else %}
+            Set Transfer PIN
+            {% endif %}
+        </button>
+    </form>
+
+    <div class="demo-security-box">
+        DEMO SECURITY
+        <span>
+            This is a simulated banking system. No real bank accounts or
+            real money are connected.
+        </span>
+    </div>
 </section>
 
 <section class="professional-panel">
     <div class="panel-header">
         <div>
             <h2>Account status</h2>
-            <p>Your demo checking account is the only account type supported.</p>
+            <p>Your demo checking account is active.</p>
         </div>
         <span class="account-status">ACTIVE</span>
     </div>
-    <p class="demo-security-box">DEMO SYSTEM · No real funds or external bank accounts are connected.</p>
 </section>
 
 {% endblock %}

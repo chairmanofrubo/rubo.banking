@@ -66,6 +66,40 @@ class MiniBankSmokeTests(unittest.TestCase):
             data={"username": username, "password": password},
             follow_redirects=False,
         )
+    def set_transfer_pin(self, pin="123456"):
+        response = self.client.post(
+            "/accounts/transfer-pin",
+            data={
+                "new_pin": pin,
+                "confirm_pin": pin,
+            },
+            follow_redirects=False,
+        )
+        self.assertEqual(response.status_code, 302)
+        return response
+
+    def complete_transfer(self, receiver_username, amount, note="", pin="123456"):
+        response = self.client.post(
+            "/transfer",
+            data={
+                "receiver_username": receiver_username,
+                "amount": amount,
+                "note": note,
+            },
+            follow_redirects=False,
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.assertIn("/transfer/confirm", response.headers["Location"])
+
+        response = self.client.post(
+            "/transfer/confirm",
+            data={"transfer_pin": pin},
+            follow_redirects=False,
+        )
+
+        self.assertEqual(response.status_code, 302)
+        return response
 
     def test_public_and_login_pages_work(self):
         public_page = self.client.get("/")
@@ -99,7 +133,7 @@ class MiniBankSmokeTests(unittest.TestCase):
         self.assertIn(b"winged", dashboard.data)
         accounts = self.client.get("/accounts")
         self.assertEqual(accounts.status_code, 200)
-        self.assertIn(b"Checking account", accounts.data)
+        self.assertIn(b"AVAILABLE CHECKING BALANCE", accounts.data)
         self.assertNotIn(b"Savings", accounts.data)
         self.assertEqual(self.client.get("/accounts/move-money").status_code, 404)
 
@@ -141,15 +175,14 @@ class MiniBankSmokeTests(unittest.TestCase):
         self.login("dev", "Developer123")
         self.assertEqual(self.client.get("/admin").status_code, 200)
         self.assertIn(b"role-badge-developer", self.client.get("/admin").data)
-        response = self.client.post(
-            "/transfer",
-            data={
-                "receiver_username": "admin",
-                "amount": "10.00",
-                "note": "Smoke test",
-            },
+        self.set_transfer_pin()
+
+        response = self.complete_transfer(
+            "admin",
+            "10.00",
+            "Smoke test",
         )
-        self.assertEqual(response.status_code, 302)
+
         self.assertIn("/receipt/", response.headers["Location"])
         dashboard = self.client.get("/dashboard")
         self.assertIn(b"Reference: TXN-", dashboard.data)
@@ -398,15 +431,13 @@ class MiniBankSmokeTests(unittest.TestCase):
             self.assertEqual(ScheduledTransfer.query.count(), 1)
             self.assertGreaterEqual(Notification.query.count(), 0)
 
-        response = self.client.post(
-            "/transfer",
-            data={
-                "receiver_username": "roadmap-recipient",
-                "amount": "3.00",
-                "note": "Ledger smoke",
-            },
+        self.set_transfer_pin()
+
+        response = self.complete_transfer(
+            "roadmap-recipient",
+            "3.00",
+            "Ledger smoke",
         )
-        self.assertEqual(response.status_code, 302)
         with app.app_context():
             self.assertEqual(LedgerEntry.query.count(), 2)
             self.assertEqual(
@@ -425,15 +456,17 @@ class MiniBankSmokeTests(unittest.TestCase):
         self.login("admin", "StrongPass123")
         source_id = self.create_user("cancel-source", balance="20.00")
         receiver_id = self.create_user("cancel-receiver", balance="2.00")
-        response = self.client.post(
-            "/transfer",
-            data={
-                "receiver_username": "cancel-receiver",
-                "amount": "4.00",
-                "note": "Cancelable smoke",
-            },
+        self.set_transfer_pin()
+
+        response = self.complete_transfer(
+            "cancel-receiver",
+            "4.00",
+            "Cancelable smoke",
         )
-        transaction_id = int(response.headers["Location"].rsplit("/", 1)[-1])
+
+        transaction_id = int(
+            response.headers["Location"].rsplit("/", 1)[-1]
+        )
         self.assertEqual(
             self.client.post(f"/transfer/{transaction_id}/cancel").status_code,
             302,
@@ -450,25 +483,22 @@ class MiniBankSmokeTests(unittest.TestCase):
         self.client.post("/logout")
         self.login("velocity-source", "Password123")
 
-        large_transfer = self.client.post(
-            "/transfer",
-            data={
-                "receiver_username": "velocity-receiver",
-                "amount": "5001.00",
-                "note": "No transfer cap",
-            },
+        self.set_transfer_pin()
+
+        large_transfer = self.complete_transfer(
+            "velocity-receiver",
+            "5001.00",
+            "No transfer cap",
         )
         self.assertEqual(large_transfer.status_code, 302)
 
-        first = self.client.post(
-            "/transfer",
-            data={
-                "receiver_username": "velocity-receiver",
-                "amount": "100.00",
-                "note": "Duplicate check",
-            },
+        first = self.complete_transfer(
+            "velocity-receiver",
+            "100.00",
+            "Duplicate check",
         )
         self.assertEqual(first.status_code, 302)
+
         duplicate = self.client.post(
             "/transfer",
             data={
@@ -478,6 +508,7 @@ class MiniBankSmokeTests(unittest.TestCase):
             },
             follow_redirects=True,
         )
+
         self.assertIn(b"matching transfer", duplicate.data)
 
     def test_composable_roles_management_balances_and_demo_check(self):

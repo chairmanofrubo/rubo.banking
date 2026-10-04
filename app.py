@@ -1,4 +1,4 @@
-import os
+﻿import os
 import secrets
 import csv
 import io
@@ -172,6 +172,11 @@ class User(UserMixin, db.Model):
         nullable=False,
     )
 
+    transfer_pin_hash = db.Column(
+        db.String(255),
+        nullable=True,
+    )
+
     is_enabled = db.Column(
         db.Boolean,
         default=True,
@@ -189,6 +194,15 @@ class User(UserMixin, db.Model):
         return check_password_hash(
             self.password_hash,
             password,
+        )
+
+    def set_transfer_pin(self, pin):
+        self.transfer_pin_hash = generate_password_hash(pin)
+
+    def check_transfer_pin(self, pin):
+        return bool(self.transfer_pin_hash) and check_password_hash(
+            self.transfer_pin_hash,
+            pin,
         )
 
     @property
@@ -1264,10 +1278,44 @@ def profile():
 # ACCOUNTS
 # =========================================================
 
-@app.route("/accounts")
+@app.route("/accounts", methods=["GET"])
 @login_required
 def accounts():
-    return render_template("accounts.html")
+    return render_template(
+        "accounts.html",
+        transfer_pin_configured=bool(current_user.transfer_pin_hash),
+    )
+
+
+@app.route("/accounts/transfer-pin", methods=["POST"])
+@login_required
+def set_transfer_pin():
+    current_pin = request.form.get("current_pin", "").strip()
+    new_pin = request.form.get("new_pin", "").strip()
+    confirm_pin = request.form.get("confirm_pin", "").strip()
+
+    if not new_pin.isdigit() or len(new_pin) != 6:
+        flash("Your Transfer PIN must be exactly 6 digits.", "error")
+        return redirect(url_for("accounts"))
+
+    if new_pin != confirm_pin:
+        flash("The new Transfer PINs do not match.", "error")
+        return redirect(url_for("accounts"))
+
+    if current_user.transfer_pin_hash:
+        if not current_pin or not current_user.check_transfer_pin(current_pin):
+            flash("Your current Transfer PIN is incorrect.", "error")
+            return redirect(url_for("accounts"))
+
+        message = "Your Transfer PIN has been changed."
+    else:
+        message = "Your Transfer PIN has been created."
+
+    current_user.set_transfer_pin(new_pin)
+    db.session.commit()
+
+    flash(message, "success")
+    return redirect(url_for("accounts"))
 
 
 # =========================================================
@@ -1278,8 +1326,16 @@ def accounts():
 @login_required
 def transfer():
     if request.method == "POST":
+        if not current_user.transfer_pin_hash:
+            flash(
+                "Set up your Transfer PIN in Accounts before making a transfer.",
+                "error",
+            )
+            return redirect(url_for("accounts"))
+
         beneficiary_id = request.form.get("beneficiary_id", "").strip()
         receiver = None
+
         if beneficiary_id:
             try:
                 beneficiary = Beneficiary.query.filter_by(
@@ -1288,18 +1344,22 @@ def transfer():
                 ).first()
             except (TypeError, ValueError):
                 beneficiary = None
+
             if beneficiary:
                 receiver = beneficiary.beneficiary
-        receiver_username = request.form.get("receiver_username", "").strip()
+
+        receiver_username = request.form.get(
+            "receiver_username",
+            "",
+        ).strip()
+
         if receiver is None:
-            receiver = User.query.filter_by(username=receiver_username).first()
+            receiver = User.query.filter_by(
+                username=receiver_username
+            ).first()
 
         if not receiver or not receiver.is_enabled:
-            flash(
-                "Recipient not found.",
-                "error",
-            )
-
+            flash("Recipient not found.", "error")
             return redirect(url_for("transfer"))
 
         if receiver.id == current_user.id:
@@ -1307,20 +1367,17 @@ def transfer():
                 "You cannot transfer to yourself.",
                 "error",
             )
-
             return redirect(url_for("transfer"))
 
         try:
             amount = Decimal(
                 request.form.get("amount", "")
             ).quantize(Decimal("0.01"))
-
-        except (InvalidOperation, ValueError):
+        except (InvalidOperation, ValueError, TypeError):
             flash(
                 "Enter a valid amount.",
                 "error",
             )
-
             return redirect(url_for("transfer"))
 
         if amount <= 0:
@@ -1328,7 +1385,6 @@ def transfer():
                 "Amount must be greater than zero.",
                 "error",
             )
-
             return redirect(url_for("transfer"))
 
         if amount > Decimal(current_user.balance):
@@ -1336,7 +1392,6 @@ def transfer():
                 "Insufficient checking balance.",
                 "error",
             )
-
             return redirect(url_for("transfer"))
 
         note = request.form.get(
@@ -1345,6 +1400,7 @@ def transfer():
         ).strip()[:200]
 
         duplicate_cutoff = datetime.now(timezone.utc) - timedelta(seconds=60)
+
         duplicate = Transaction.query.filter(
             Transaction.sender_id == current_user.id,
             Transaction.receiver_id == receiver.id,
@@ -1353,12 +1409,120 @@ def transfer():
             Transaction.created_at >= duplicate_cutoff,
             Transaction.status == "completed",
         ).first()
+
         if duplicate:
-            flash("A matching transfer was submitted recently.", "error")
+            flash(
+                "A matching transfer was submitted recently.",
+                "error",
+            )
             return redirect(url_for("transfer"))
 
-        current_user.balance = Decimal(current_user.balance) - amount
-        receiver.balance = Decimal(receiver.balance) + amount
+        session["pending_transfer"] = {
+            "receiver_id": receiver.id,
+            "amount": str(amount),
+            "note": note,
+        }
+
+        return redirect(url_for("confirm_transfer"))
+
+    return render_template(
+        "transfer.html",
+        beneficiaries=Beneficiary.query.filter_by(
+            owner_id=current_user.id
+        ).order_by(Beneficiary.nickname.asc()).all(),
+    )
+
+
+@app.route("/transfer/confirm", methods=["GET", "POST"])
+@login_required
+def confirm_transfer():
+    pending = session.get("pending_transfer")
+
+    if not pending:
+        flash("There is no transfer waiting for confirmation.", "error")
+        return redirect(url_for("transfer"))
+
+    if not current_user.transfer_pin_hash:
+        session.pop("pending_transfer", None)
+        flash(
+            "Set up your Transfer PIN in Accounts before making a transfer.",
+            "error",
+        )
+        return redirect(url_for("accounts"))
+
+    receiver = db.session.get(
+        User,
+        pending.get("receiver_id"),
+    )
+
+    if not receiver or not receiver.is_enabled:
+        session.pop("pending_transfer", None)
+        flash("The recipient is no longer available.", "error")
+        return redirect(url_for("transfer"))
+
+    try:
+        amount = Decimal(
+            str(pending.get("amount", "0"))
+        ).quantize(Decimal("0.01"))
+    except (InvalidOperation, ValueError, TypeError):
+        session.pop("pending_transfer", None)
+        flash("The pending transfer is invalid.", "error")
+        return redirect(url_for("transfer"))
+
+    if amount <= 0 or amount > Decimal(current_user.balance):
+        session.pop("pending_transfer", None)
+        flash("The transfer can no longer be completed.", "error")
+        return redirect(url_for("transfer"))
+
+    if request.method == "POST":
+        transfer_pin = request.form.get(
+            "transfer_pin",
+            "",
+        ).strip()
+
+        if not transfer_pin.isdigit() or len(transfer_pin) != 6:
+            flash(
+                "Enter your 6-digit Transfer PIN.",
+                "error",
+            )
+            return redirect(url_for("confirm_transfer"))
+
+        if not current_user.check_transfer_pin(transfer_pin):
+            flash(
+                "Incorrect Transfer PIN. No money was transferred.",
+                "error",
+            )
+            return redirect(url_for("confirm_transfer"))
+
+        note = str(pending.get("note", ""))[:200]
+
+        duplicate_cutoff = datetime.now(timezone.utc) - timedelta(seconds=60)
+
+        duplicate = Transaction.query.filter(
+            Transaction.sender_id == current_user.id,
+            Transaction.receiver_id == receiver.id,
+            Transaction.amount == amount,
+            Transaction.note == note,
+            Transaction.created_at >= duplicate_cutoff,
+            Transaction.status == "completed",
+        ).first()
+
+        if duplicate:
+            session.pop("pending_transfer", None)
+            flash(
+                "A matching transfer was submitted recently.",
+                "error",
+            )
+            return redirect(url_for("transfer"))
+
+        current_user.balance = (
+            Decimal(current_user.balance) - amount
+        )
+
+        receiver.balance = (
+            Decimal(receiver.balance) + amount
+        )
+
         transaction = Transaction(
             sender_id=current_user.id,
             receiver_id=receiver.id,
@@ -1368,13 +1532,18 @@ def transfer():
 
         db.session.add(transaction)
         db.session.flush()
+
         add_ledger_entries(transaction)
+
         create_notification(
             receiver.id,
             "Money received",
             f"{current_user.username} sent you {money(amount)}.",
         )
+
         db.session.commit()
+
+        session.pop("pending_transfer", None)
 
         transaction_data = {
             "transaction_id": transaction.id,
@@ -1388,6 +1557,7 @@ def transfer():
             "transfer_completed",
             **transaction_data,
         )
+
         send_live_update(
             receiver.id,
             "money_received",
@@ -1402,12 +1572,11 @@ def transfer():
         )
 
     return render_template(
-        "transfer.html",
-        beneficiaries=Beneficiary.query.filter_by(
-            owner_id=current_user.id
-        ).order_by(Beneficiary.nickname.asc()).all(),
+        "transfer_confirm.html",
+        receiver=receiver,
+        amount=amount,
+        note=pending.get("note", ""),
     )
-
 
 @app.route("/admin/transfer", methods=["POST"])
 @app.route("/admin/privileged-transfer", methods=["POST"])
@@ -1927,7 +2096,7 @@ def developer_tools():
             )
             db.session.commit()
             flash(
-                f"Sandbox credentials — username: {sandbox_user.username}, password: {password}",
+                f"Sandbox credentials â€” username: {sandbox_user.username}, password: {password}",
                 "success",
             )
         else:
@@ -2908,7 +3077,7 @@ def react_to_message(message_id):
     message = db.session.get(Message, message_id)
     if not message or current_user.id not in {message.sender_id, message.receiver_id}:
         abort(404)
-    emoji = request.form.get("emoji", "👍").strip()[:16]
+    emoji = request.form.get("emoji", "ðŸ‘").strip()[:16]
     reaction = MessageReaction.query.filter_by(
         message_id=message.id, user_id=current_user.id
     ).first()
@@ -2930,7 +3099,7 @@ def react_to_group_message(message_id):
     message = db.session.get(GroupMessage, message_id)
     if not message or not group_membership(message.group_id):
         abort(404)
-    emoji = request.form.get("emoji", "👍").strip()[:16]
+    emoji = request.form.get("emoji", "ðŸ‘").strip()[:16]
     reaction = GroupMessageReaction.query.filter_by(
         group_message_id=message.id, user_id=current_user.id
     ).first()
@@ -3420,6 +3589,15 @@ with app.app_context():
         )
         db.session.commit()
 
+    if "transfer_pin_hash" not in user_columns:
+        db.session.execute(
+            text(
+                'ALTER TABLE "user" ADD COLUMN transfer_pin_hash '
+                "VARCHAR(255)"
+            )
+        )
+        db.session.commit()
+
     # Migrate legacy savings balances exactly once before retiring the table.
     # The update and DROP occur in one transaction so a failed migration does
     # not destroy the legacy rows or create duplicate funds on restart.
@@ -3572,3 +3750,4 @@ if __name__ == "__main__":
         port=int(os.environ.get("PORT", "5000")),
         debug=True,
     )
+

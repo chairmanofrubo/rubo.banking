@@ -1,124 +1,435 @@
-# MiniBank Demo
+# RUBO Banking — MiniBank Demo
 
-Demo only. No real money or bank connections. The interface uses banking-style
-terminology and transaction references for realism, but all balances and
-payments are local simulation data.
+**RUBO Banking** is a local banking-style demonstration application built with Flask.
 
-All timestamps are stored as UTC-aware values where the database supports
-timezones. The shared `sgt` template filter converts every displayed timestamp
-to `SGT / Asia/Singapore (UTC+8)`, including transactions, messages, audit
-events, notifications, scheduled transfers, and statements. Datetime fields entered in the UI (such as scheduled transfers)
-are interpreted as Singapore time and normalized to UTC for storage.
+> **Demo only. No real money or bank connections.**
 
-## Run on Windows
+The application uses banking-style terminology, transaction references, balances, and account management features for realism, but **all money and transactions are local simulation data**. No real bank, payment provider, card network, or external financial service is connected.
 
-python -m venv venv
-venv\Scripts\activate
-pip install -r requirements.txt
-```powershell
-$env:ADMIN_USERNAME="admin"
-$env:ADMIN_PASSWORD="ChooseASecretPassword123"
-$env:SECRET_KEY="LongRandomSecretKeyReplaceThis"
-flask --app app run --host=0.0.0.0 --port=5000
+---
+
+## Features
+
+### Banking
+
+* User accounts and profiles
+* Local simulated balances
+* User-to-user transfers
+* Transfer receipts
+* Transaction history
+* Double-entry ledger records
+* Transfer notes
+* Duplicate-transfer protection
+* Notifications
+* Beneficiaries
+* Scheduled and recurring transfers
+* Transfer cancellation window
+* CSV statements
+* Singapore-time display for dates and times
+
+### Transfer PIN
+
+Transfers are protected by a **6-digit Transfer PIN**.
+
+* Transfer PIN can be configured from **Accounts**
+* PINs are stored using password hashing
+* A PIN is required before a transfer is executed
+* Transfers first go through a confirmation/review screen
+* Incorrect PINs do not move any money
+* Changing an existing PIN requires the current PIN
+* The PIN is never stored as plain text
+
+The transfer flow is:
+
+```text
+Enter transfer details
+        ↓
+Review transfer
+        ↓
+Enter 6-digit Transfer PIN
+        ↓
+Validate PIN
+        ↓
+Execute simulated transfer
+        ↓
+Generate receipt
 ```
 
-`SECRET_KEY` and `ADMIN_PASSWORD` are required for a fresh database. Startup
-fails clearly when `SECRET_KEY` is missing instead of running with an insecure
-default. Use a password manager to generate production values.
-There is also "DATABASE_URL", which you can use to link the application up to an 
-POSTFRES SQL databse for .db storage.
+### Responsive Banking UI
 
-## Account types
+The interface supports both desktop and mobile-style layouts.
 
-- **Standard**: normal banking, transfers, messages, and profile access.
-- **Developer**: the same management permissions as Admin.
-- **Admin**: management permissions, including user creation, balances, resets,
-  enable/disable, and deletion.
+* Responsive navigation
+* Mobile-friendly transfer forms
+* Responsive account pages
+* Mobile-friendly transaction views
+* Banking-style cards and panels
+* Desktop interface remains supported
 
-The legacy `is_admin` flag remains supported for existing databases and is
-treated as Admin access.
+---
 
-Management users can impersonate enabled accounts from the Admin panel. The
-banner identifies an impersonated session and the return action restores the
-management session. The actor is kept separately from the impersonated
-identity, stale/disabled sessions are ended safely, and starts and ends are
-written to `AuditLog`. Management users also have a separate privileged-transfer
-form requiring enabled source and recipient accounts, a positive sufficient
-amount, and a reason. The balance updates, transaction, and audit record commit
-together.
+## Account Types
 
-Messages supports both direct messages and creator-owned group chats. Any
-enabled user can create a group; owners can add or remove enabled members and
-post messages. Each member has an independent read state so visiting one chat
-does not clear another chat's unread count.
+### Standard
 
-## Demo feature set
+Normal banking access, including:
 
-The app intentionally uses local, dependency-free implementations for the
-approved roadmap:
+* Transfers
+* Messages
+* Profile access
+* Account settings
 
-- fine-grained permission records, reasoned/audited impersonation, and pending
-  privileged-transfer approval requests (`/admin/privileged-transfer`), while
-  the legacy `/admin/transfer` form remains an immediate demo operation;
-- composable Admin and Developer roles (including users holding both roles),
-  a management-only checking balance view, and audited demo-check
-  deposits between enabled accounts;
-- unlimited transfers subject to valid amounts and available balances,
-  duplicate protection, scheduled and recurring transfers, beneficiaries, a
-  five-minute cancellation window, and double-entry ledger entries;
-- searchable audit logs, in-app Socket.IO notifications, and CSV statements
-  (the PDF URL explicitly falls back to
-  CSV when no renderer is installed);
-- group owners/moderators, reactions, URL attachments, @mentions, read
-  receipts, and unread counters;
-- developer-only tools for system health, sandbox user generation, feature
-  flags, scoped API keys, and recent audit activity;
-- the developer console uses a compact black-and-white terminal-style
-  interface with a complete legacy-portal directory for every active banking
-  module;
+### Developer
 
-No feature sends money, email, SMS, or card transactions to an external
-provider. Scheduled transfers are processed when the owner visits the
-scheduled-transfers page; a production deployment should replace that demo
-trigger with a trusted worker and database migrations.
+Developer accounts have management permissions in addition to normal account functionality.
 
-The shared navigation includes an account/security status indicator and every
-page includes the global copyright footer:
-`Copyright Pranav Hemahlathaa Harish and Hari Suhanth Karthikeyan, 2026.`
-Role identity badges are rendered without external assets: Admin uses a
-winged Patron-style crown emblem and Developer uses a `</>` coding emblem.
-Both badges appear together for dual-role accounts, with accessible labels and
-titles.
+Developer tools include:
 
-Saved beneficiaries can be selected directly from the transfer form, approval
-requests are checked again before execution, and failed scheduled payments
-remain active for a later retry. Admins can grant and audit individual
-permissions, while chat pages show reaction and read-receipt status.
+* System health information
+* Sandbox user generation
+* Feature flags
+* Scoped API keys
+* Recent audit activity
+* Developer console
 
-Admin/Developer role selection is stored in `UserRole` records. The legacy
-`account_type` and `is_admin` columns remain readable for older databases; both
-management roles receive the same management permissions. A demo check deposit
-debits the enabled check writer and credits the enabled recipient in one
-transaction, records check/reference details, creates balanced ledger entries,
-and writes an audit event. The management balance view is read-only and also
-writes an audit event.
+### Admin
 
-MiniBank now uses one checking account per user. On startup, legacy databases
-move each user's former secondary-account balance into checking in a single
-migration transaction, then retire the old account and internal-transfer
-records. No new secondary accounts or internal account transfers are created.
+Administrators have management permissions including:
 
-## Future hardening
+* User creation
+* Balance management
+* Account resets
+* Enable/disable accounts
+* Account deletion
+* Permission management
+* User impersonation
+* Privileged transfers
+* Audit-log access
 
-Multi-factor authentication, password reset by verified email, fraud/risk
-review, accessibility improvements, CSRF protection, a trusted scheduled-job
-worker, and a proper database migration tool are natural next steps for a more
-realistic bank simulation.
+The legacy `is_admin` flag remains supported for existing databases and is treated as Admin access.
 
-## Smoke tests
+---
+
+## Management Features
+
+Management users can impersonate enabled accounts from the Admin panel.
+
+The application:
+
+* Clearly identifies an impersonated session
+* Keeps the original management identity separately
+* Allows the administrator to return to the management account
+* Safely ends stale or disabled sessions
+* Records impersonation starts and ends in `AuditLog`
+
+Management users also have a privileged-transfer system requiring:
+
+* An enabled source account
+* An enabled recipient account
+* A positive transfer amount
+* Sufficient balance
+* A reason for the transfer
+
+The balance changes, transaction, and audit record are committed together.
+
+---
+
+## Messaging
+
+The messaging system supports:
+
+* Direct messages
+* Creator-owned group chats
+* Group owners and moderators
+* Adding/removing enabled members
+* Reactions
+* URL attachments
+* `@mentions`
+* Read receipts
+* Unread counters
+
+Each member has an independent read state, so reading one conversation does not incorrectly clear another conversation's unread count.
+
+---
+
+## Admin and Developer Systems
+
+The application includes:
+
+* Fine-grained permission records
+* Audited impersonation
+* Pending privileged-transfer approval requests
+* Legacy privileged-transfer support
+* Admin and Developer role combinations
+* Management-only balance viewing
+* Audited demo-check deposits
+* Searchable audit logs
+* Socket.IO notifications
+* Feature flags
+* Scoped API keys
+* Sandbox user generation
+* System health tools
+* Developer console
+
+Admin and Developer roles are stored using `UserRole` records.
+
+The legacy `account_type` and `is_admin` columns remain readable for compatibility with older databases.
+
+Users may hold both Admin and Developer roles.
+
+---
+
+## Database
+
+RUBO Banking uses a **persistent database**.
+
+This means that restarting Flask does **not** reset the users, balances, transactions, or other stored data.
+
+For example:
+
+```cmd
+python -m flask --app app run --host=0.0.0.0 --port=5000
+```
+
+Stopping the server with:
+
+```text
+CTRL+C
+```
+
+only stops Flask. It does **not** delete the database.
+
+This is intentional.
+
+### Starting with a fresh database
+
+If a completely fresh demo database is required:
+
+1. Stop Flask with `CTRL+C`.
+2. Identify the database file.
+3. Back it up if necessary.
+4. Delete the correct database file.
+5. Start Flask again.
+
+To find SQLite database files on Windows:
+
+```cmd
+dir /s /b *.db
+```
+
+If no `.db` file is found, also check:
+
+```cmd
+dir /s /b *.sqlite
+dir /s /b *.sqlite3
+```
+
+**Do not delete a database file until you have confirmed that it belongs to RUBO Banking.**
+
+---
+
+## Database Configuration
+
+The application can use a local SQLite database for development.
+
+A `DATABASE_URL` environment variable can also be used to connect the application to a supported external database such as PostgreSQL.
+
+Example:
+
+```text
+DATABASE_URL=postgresql://username:password@host/database
+```
+
+Never commit real database passwords or credentials to GitHub.
+
+---
+
+## Time Zones
+
+All timestamps are stored as UTC-aware values where supported by the database.
+
+The shared `sgt` template filter converts displayed timestamps to:
+
+```text
+SGT / Asia/Singapore (UTC+8)
+```
+
+This applies to:
+
+* Transactions
+* Messages
+* Audit events
+* Notifications
+* Scheduled transfers
+* Statements
+* Other displayed timestamps
+
+Datetime values entered through the UI, such as scheduled-transfer times, are interpreted as Singapore time and normalized to UTC for storage.
+
+---
+
+## Running on Windows
+
+Open Command Prompt in the project directory.
+
+### 1. Create the virtual environment
+
+```cmd
+python -m venv venv
+```
+
+### 2. Activate it
+
+```cmd
+venv\Scripts\activate
+```
+
+### 3. Install dependencies
+
+```cmd
+python -m pip install --upgrade pip
+pip install -r requirements.txt
+```
+
+### 4. Configure the application
+
+For Command Prompt:
+
+```cmd
+set ADMIN_USERNAME=admin
+set ADMIN_PASSWORD=ChooseASecretPassword123
+set SECRET_KEY=LongRandomSecretKeyReplaceThis
+```
+
+For a fresh database, `ADMIN_USERNAME`, `ADMIN_PASSWORD`, and `SECRET_KEY` are required.
+
+Use a strong secret value for `SECRET_KEY` and a strong administrator password.
+
+### 5. Start Flask
+
+```cmd
+python -m flask --app app run --host=0.0.0.0 --port=5000
+```
+
+Open:
+
+```text
+http://127.0.0.1:5000
+```
+
+---
+
+## Environment Variables
+
+| Variable         | Purpose                          |
+| ---------------- | -------------------------------- |
+| `SECRET_KEY`     | Flask session/security key       |
+| `ADMIN_USERNAME` | Initial administrator username   |
+| `ADMIN_PASSWORD` | Initial administrator password   |
+| `DATABASE_URL`   | Optional database connection URL |
+
+Do not publish real passwords, secret keys, API keys, or database credentials.
+
+---
+
+## Demo Security
+
+The application includes several security-oriented demo features:
+
+* Password hashing
+* Hashed Transfer PINs
+* Login/session management
+* Enabled/disabled account checks
+* Permission records
+* Audit logging
+* Duplicate-transfer protection
+* Transfer confirmation
+* Transfer PIN authorization
+* Privileged-transfer validation
+
+This is still a **demo application**, not production banking software.
+
+---
+
+## Important Limitations
+
+No feature sends real:
+
+* Money
+* Bank transfers
+* Card transactions
+* SMS messages
+* Financial payments
+
+to external providers.
+
+Scheduled transfers are processed when the owner visits the scheduled-transfers page. A production application should replace this demo behavior with a trusted background worker and proper database migrations.
+
+The PDF statement URL falls back to CSV when a PDF renderer is not installed.
+
+---
+
+## One Checking Account Per User
+
+RUBO Banking uses one checking account per user.
+
+On startup, legacy databases can migrate a user's former secondary-account balance into checking in a single migration transaction.
+
+The old secondary account and internal-transfer records are then retired.
+
+No new secondary accounts or internal account transfers are created.
+
+---
+
+## Navigation and Branding
+
+The shared navigation includes an account/security status indicator.
+
+Every page includes the global copyright footer:
+
+```text
+Copyright Pranav Hemahlathaa Harish and Hari Suhanth Karthikeyan, 2026.
+```
+
+Role badges are rendered without external assets:
+
+* **Admin** — winged Patron-style crown emblem
+* **Developer** — `</>` coding emblem
+
+Dual-role accounts can display both badges.
+
+---
+
+## Future Hardening
+
+Potential future improvements include:
+
+* Multi-factor authentication
+* Verified-email password reset
+* Fraud/risk review
+* Improved accessibility
+* CSRF protection
+* Trusted scheduled-job worker
+* Proper database migration tooling
+* Stronger production session/security configuration
+* Production-grade logging and monitoring
+
+---
+
+## Smoke Tests
 
 Run the built-in tests with:
 
-```powershell
+```cmd
 python -m unittest discover -s tests -v
 ```
+
+---
+
+## Disclaimer
+
+**RUBO Banking / MiniBank Demo is a software demonstration project.**
+
+It is not a real bank, financial institution, payment service, or banking platform.
+
+**No real money is transferred.**
